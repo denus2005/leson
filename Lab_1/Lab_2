@@ -1,1 +1,285 @@
-2fsdfd
+#include <iostream> 
+#include <thread> 
+#include <queue> 
+#include <mutex> 
+#include <chrono> 
+#include <cmath> 
+std::queue<int> dataQueue; 
+std::mutex mtx; 
+bool isDataReady = false; 
+bool isPrime(int number) { 
+ if (number <= 1) return false; 
+ for (int i = 2; i <= std::sqrt(number); ++i) { 
+ if (number % i == 0) return false; 
+ } 
+ return true; 
+} 
+void prepareData() { 
+ int num; 
+ while (std::cin >> num) { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ dataQueue.push(num); 
+ } 
+ std::unique_lock<std::mutex> lock(mtx); 
+ isDataReady = true; 
+} 
+void processData() { 
+ while (true) { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ if (isDataReady && dataQueue.empty()) { 
+ break; 
+ } 
+ if (!dataQueue.empty()) { 
+ int num = dataQueue.front(); 
+ dataQueue.pop(); 
+ if (isPrime(num)) { 
+ std::cout << "Prime number: " << num << std::endl; 
+ } 
+ } else { 
+ lock.unlock(); 
+ std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+ }
+ } 
+} 
+int main() { 
+ std::thread preparationThread(prepareData); 
+ std::thread processingThread(processData); 
+ preparationThread.detach(); 
+ processingThread.join(); 
+ return 0; 
+} 
+
+
+#include <iostream> 
+#include <thread> 
+#include <condition_variable> 
+#include <chrono> 
+std::condition_variable cv; 
+std::mutex mtx; 
+int flag; 
+void waitFunction(int id) { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ std::cout << "Thread " << id << " is entering waiting state.\n";  cv.wait(lock, [] { return flag == 1; }); 
+ std::cout << "Thread " << id << " has finished waiting.\n"; } 
+void awakeFunction() { 
+ std::this_thread::sleep_for(std::chrono::milliseconds(100));  std::cout << "Awake thread is notifying all threads.\n";  cv.notify_all(); 
+ std::this_thread::sleep_for(std::chrono::milliseconds(100));  flag = 1; 
+ std::cout << "Awake thread is notifying all threads again.\n";  cv.notify_all(); 
+} 
+int main() { 
+ std::thread t1(waitFunction, 1); 
+ std::thread t2(waitFunction, 2); 
+ std::thread t3(waitFunction, 3); 
+ std::thread aw(awakeFunction); 
+ t1.join(); 
+ t2.join(); 
+ t3.join(); 
+ aw.join(); 
+ return 0; 
+}
+
+
+#include <iostream> 
+#include <thread> 
+#include <condition_variable> 
+#include <chrono> 
+std::condition_variable cv; 
+std::mutex mtx; 
+int flag; 
+void waitFunction(int id) { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ std::cout << "Thread " << id << " is entering waiting state.\n"; 
+ cv.wait(lock, [] { return flag == 1; }); 
+ std::cout << "Message from thread " << id << "\n"; 
+} 
+void notifyFunction() { 
+ std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+ flag = 1; 
+ cv.notify_one(); 
+} 
+int main() { 
+ std::thread t1(waitFunction, 1); 
+ std::thread t2(waitFunction, 2); 
+ std::thread t3(waitFunction, 3); 
+ std::thread notifier(notifyFunction); 
+ t1.join(); 
+ t2.join(); 
+ t3.join(); 
+ notifier.join(); 
+ return 0; 
+}
+
+
+#include <iostream> 
+#include <thread> 
+#include <queue> 
+#include <mutex> 
+#include <condition_variable> 
+#include <chrono> 
+#include <cmath> 
+std::queue<int> dataQueue; 
+std::mutex mtx; 
+std::condition_variable cv; 
+bool isDataReady = false; 
+bool isPrime(int number) { 
+ if (number <= 1) return false; 
+ for (int i = 2; i <= std::sqrt(number); ++i) { 
+ if (number % i == 0) return false; 
+ } 
+ return true; 
+} 
+void dataPreparation() { 
+ int num; 
+ while (std::cin >> num) { 
+ { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ dataQueue.push(num); 
+ } 
+ cv.notify_one();  
+ } 
+ { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ isDataReady = true;  
+ } 
+ cv.notify_all(); 
+} 
+void dataProcessing() { 
+ while (true) { 
+ std::unique_lock<std::mutex> lock(mtx); 
+ cv.wait(lock, [] { return !dataQueue.empty() || isDataReady; }); 
+ if (isDataReady && dataQueue.empty()) { 
+ break; 
+ } 
+ if (!dataQueue.empty()) { 
+ int num = dataQueue.front(); 
+ dataQueue.pop(); 
+ lock.unlock();  
+ if (isPrime(num)) { 
+ std::cout << "Prime number: " << num << std::endl;  } 
+ } else { 
+ lock.unlock(); 
+ std::this_thread::sleep_for(std::chrono::milliseconds(100));   } 
+ } 
+} 
+int main() { 
+ std::thread preparationThread(dataPreparation); 
+ std::thread processingThread(dataProcessing); 
+ preparationThread.detach(); 
+ processingThread.join(); 
+ return 0; 
+} 
+
+
+#include <iostream> 
+#include <cmath> 
+#include <future> 
+#include <chrono> 
+bool isPrime(int number) { 
+ if (number <= 1) return false; 
+ for (int i = 2; i <= std::sqrt(number); ++i) { 
+ if (number % i == 0) return false; 
+ } 
+ return true;
+} 
+int nthPrime(int n) { 
+ int count = 0; 
+ int number = 1; 
+ while (count < n) { 
+ ++number; 
+ if (isPrime(number)) { 
+ ++count; 
+ } 
+ } 
+ return number; 
+} 
+int main() { 
+ int n; 
+ std::cout << "Enter the number of the prime to find: "; 
+ std::cin >> n; 
+ std::cout << std::endl; 
+ // 1. Використання std::async з параметром std::launch::deferred 
+ auto futurePrimeDeferred = std::async(std::launch::deferred, nthPrime, n); 
+ int userChoice; 
+ std::cout << "Select a function to calculate (1 - sqrt, 2 - sin, 3 - log): ";  std::cin >> userChoice; 
+ switch (userChoice) { 
+ case 1: 
+ std::cout << "Square root of " << n << " = " << std::sqrt(n) << std::endl;  break; 
+ case 2: 
+ std::cout << "Sine of " << n << " = " << std::sin(n) << std::endl;  break; 
+ case 3: 
+ if (n > 0) { 
+ std::cout << "Logarithm of " << n << " = " << std::log(n) << std::endl;  } else { 
+ std::cout << "Logarithm is defined only for positive numbers." << std::endl;  } 
+ break; 
+ default: 
+ std::cout << "Invalid choice." << std::endl; 
+ } 
+ std::cout << std::endl << "------------------------------------------------------" <<  std::endl; 
+ auto start_deferred = std::chrono::high_resolution_clock::now(); 
+ int deferredPrime = futurePrimeDeferred.get();  
+ auto end_deferred = std::chrono::high_resolution_clock::now(); 
+ std::chrono::duration<double> duration_deferred = end_deferred - start_deferred;  std::cout << n << "-th prime number (deferred): " << deferredPrime << "\n";  std::cout << "Execution time with std::launch::deferred: " <<  
+duration_deferred.count() << " seconds\n\n"; 
+ // 2. Використання std::async з параметром std::launch::async 
+ auto start_async = std::chrono::high_resolution_clock::now(); 
+ std::future<int> futurePrimeAsync = std::async(std::launch::async, nthPrime, n); 
+ int asyncPrime = futurePrimeAsync.get(); 
+ auto end_async = std::chrono::high_resolution_clock::now(); 
+ std::chrono::duration<double> duration_async = end_async - start_async;  std::cout << n << "-th prime number (async): " << asyncPrime << "\n";  std::cout << "Execution time with std::launch::async: " << duration_async.count() << "  seconds\n"; 
+ return 0; 
+}
+
+
+
+#include <iostream> 
+#include <future> 
+#include <thread> 
+#include <cmath> 
+#include <chrono> 
+using namespace std; 
+int nthPrime(int n) { 
+ int count = 0; 
+ int num = 2; 
+ while (count < n) { 
+ bool isPrime = true; 
+ for (int i = 2; i <= std::sqrt(num); ++i) { 
+ if (num % i == 0) { 
+ isPrime = false; 
+ break; 
+ } 
+ } 
+ if (isPrime) { 
+ ++count; 
+ } 
+ ++num; 
+ } 
+ return num - 1; 
+} 
+void calculatePrimes(int n, std::promise<int> nPrimePromise, std::promise<int>  n10PrimePromise, std::promise<bool> signalPromise) { 
+ int nthPrimeValue = nthPrime(n);  
+ int nth10PrimeValue = nthPrime(n * 10);  
+ nPrimePromise.set_value(nthPrimeValue);  
+ n10PrimePromise.set_value(nth10PrimeValue);  
+ signalPromise.set_value(true); 
+} 
+void printSquareRoot(int n, std::future<bool> signalFuture) {  signalFuture.wait();  
+ std::this_thread::sleep_for(std::chrono::seconds(2));  
+ std::cout << "Square root of " << n << " is " << std::sqrt(n) << "\n"; } 
+int main() { 
+ int n; 
+ std::cout << "Enter the number of the prime you want to find: ";  std::cin >> n; 
+ std::promise<int> nPrimePromise, n10PrimePromise; 
+ std::future<int> nPrimeFuture = nPrimePromise.get_future();
+ std::future<int> n10PrimeFuture = n10PrimePromise.get_future(); 
+ std::promise<bool> signalPromise; 
+ std::future<bool> signalFuture = signalPromise.get_future(); 
+ std::thread primeThread(calculatePrimes, n, std::move(nPrimePromise),  std::move(n10PrimePromise), std::move(signalPromise)); 
+ std::thread sqrtThread(printSquareRoot, n, std::move(signalFuture)); 
+ int nthPrimeValue = nPrimeFuture.get(); 
+ std::cout << n << "-th prime number: " << nthPrimeValue << "\n"; 
+ int nth10PrimeValue = n10PrimeFuture.get(); 
+ std::cout << (n * 10) << "-th prime number: " << nth10PrimeValue << "\n"; 
+ primeThread.join(); 
+ sqrtThread.join(); 
+ return 0; 
+} 
